@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+.env
+.env.*
+*.egg-info/
+
+# Node
+node_modules/
+npm-debug.log*
+.npm
+
+# Build outputs
+frontend/.vite/
+# Keep frontend/dist for deployment
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Databricks
+.databricks/
+
+# OS
+.DS_Store
+.AppleDouble
+
+# Local-only artifacts
+seed/.generated/
+seed/.cache/
+*.tmp
+.alembic_cache/

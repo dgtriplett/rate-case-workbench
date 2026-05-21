@@ -1,0 +1,247 @@
+{
+  "utility": {
+    "legal_name": "Northern Light Power & Gas Company",
+    "trade_name": "NLPG",
+    "doing_business_as": "Northern Light",
+    "headquarters_city": "Aurora Falls",
+    "headquarters_state": "Cascadia",
+    "parent_holdco": "Northern Light Holdings, Inc.",
+    "ticker": "NLPGH",
+    "service_type": "combination_electric_and_gas",
+    "incorporation_year": 1902,
+    "fiscal_year_end": "12-31"
+  },
+  "regulator": {
+    "name": "Cascadia Public Utilities Commission",
+    "abbreviation": "CPUC-X",
+    "address": "550 Pioneer Avenue, Aurora Falls, Cascadia 98101",
+    "case_docket_pattern": "NLPG-YY-NNN",
+    "commissioner_count": 5,
+    "commissioners": [
+      {"name": "Lillian Okonkwo-Reyes", "role": "Chair", "term_end": "2028-06-30", "party": "appointed"},
+      {"name": "Marcus Vandermeer", "role": "Vice Chair", "term_end": "2027-06-30", "party": "appointed"},
+      {"name": "Yuki Tanigawa-Brooks", "role": "Commissioner", "term_end": "2029-06-30", "party": "appointed"},
+      {"name": "Samuel Achebe", "role": "Commissioner", "term_end": "2026-06-30", "party": "appointed"},
+      {"name": "Ingrid Halvorsen", "role": "Commissioner", "term_end": "2030-06-30", "party": "appointed"}
+    ],
+    "administrative_law_judges": [
+      {"name": "Patricia Saint-Clair", "title": "Chief ALJ"},
+      {"name": "Devon Mwangi", "title": "Senior ALJ"},
+      {"name": "Henrietta Bouvier", "title": "ALJ"}
+    ]
+  },
+  "service_territory": {
+    "states": ["Cascadia"],
+    "counties": [
+      "Aurora", "Ridgemont", "Salish", "Three Rivers", "Cobalt", "Sunbreak", "Mosswood"
+    ],
+    "square_miles": 18420,
+    "largest_cities": ["Aurora Falls", "Ridgemont", "Salish Bay", "Three Rivers"]
+  },
+  "customers": {
+    "total_customers_2025": 752341,
+    "by_class_2025": {
+      "residential_electric": 542100,
+      "small_commercial_electric": 78420,
+      "large_commercial_electric": 8941,
+      "industrial_electric": 312,
+      "residential_gas": 198450,
+      "small_commercial_gas": 22810,
+      "large_commercial_gas": 1308
+    },
+    "annual_growth_rate": 0.011,
+    "low_income_share": 0.182
+  },
+  "operations": {
+    "electric_sales_mwh_2025": 22841000,
+    "peak_load_mw_2025": 5128,
+    "gas_sales_dth_2025": 88420000,
+    "transmission_circuit_miles": 4820,
+    "distribution_overhead_miles": 21450,
+    "distribution_underground_miles": 9820,
+    "gas_main_miles": 18420,
+    "substations": 312,
+    "saidi_minutes_2025": 124.6,
+    "saifi_2025": 1.18,
+    "caidi_minutes_2025": 105.6,
+    "generation_owned_mw": 2840,
+    "generation_mix": {
+      "hydro_pct": 41,
+      "wind_pct": 18,
+      "solar_pct": 9,
+      "natural_gas_pct": 22,
+      "battery_storage_pct": 4,
+      "purchased_power_pct": 6
+    }
+  },
+  "financials_high_level": {
+    "test_year": 2026,
+    "rate_base_2025_million": 6420,
+    "rate_base_2026_proposed_million": 6790,
+    "revenue_requirement_2026_million": 1840,
+    "revenue_deficiency_2026_million": 168.4,
+    "current_authorized_roe_pct": 9.55,
+    "requested_roe_pct": 10.10,
+    "authorized_capital_structure_equity_pct": 50.0,
+    "requested_capital_structure_equity_pct": 51.5,
+    "long_term_debt_cost_pct": 4.85,
+    "weighted_cost_of_capital_pct": 7.21,
+    "total_operating_expenses_2025_million": 1242,
+    "annual_capex_plan_million": {
+      "2026": 845,
+      "2027": 902,
+      "2028": 928,
+      "2029": 945,
+      "2030": 962
+    }
+  },
+  "executives": [
+    {"name": "Dr. Helena Marchetti-Yamamoto", "title": "President & CEO", "tenure_years": 6},
+    {"name": "Brendan O'Sullivan", "title": "Chief Financial Officer", "tenure_years": 4},
+    {"name": "Dr. Kwame Adeyemi", "title": "Chief Operating Officer", "tenure_years": 8},
+    {"name": "Priyanka Venkataraman-Hayes", "title": "VP Regulatory & External Affairs", "tenure_years": 5},
+    {"name": "Theodore Wachtmeister", "title": "General Counsel", "tenure_years": 3},
+    {"name": "Dr. Asha Bandyopadhyay", "title": "VP Resource Planning", "tenure_years": 7},
+    {"name": "Linnea Storgaard", "title": "VP Customer Solutions", "tenure_years": 4}
+  ],
+  "witnesses": [
+    {
+      "id": "W-001",
+      "name": "Dr. Helena Marchetti-Yamamoto",
+      "title": "President & Chief Executive Officer",
+      "external": false,
+      "expertise": ["overall case policy", "corporate strategy", "stakeholder engagement"]
+    },
+    {
+      "id": "W-002",
+      "name": "Brendan O'Sullivan",
+      "title": "Chief Financial Officer",
+      "external": false,
+      "expertise": ["revenue requirement", "capital structure", "cost of capital"]
+    },
+    {
+      "id": "W-003",
+      "name": "Dr. Maria Calderón-Lefebvre",
+      "title": "Director, Cost of Service & Rate Design",
+      "external": false,
+      "expertise": ["cost of service study", "class cost allocation", "rate design"]
+    },
+    {
+      "id": "W-004",
+      "name": "Jonathan Akinwale-Petersen",
+      "title": "Manager, Depreciation Studies",
+      "external": false,
+      "expertise": ["depreciation rates", "service life studies", "net salvage"]
+    },
+    {
+      "id": "W-005",
+      "name": "Dr. Camille Bergstrom",
+      "title": "Principal, Bergstrom Regulatory Advisors LLC",
+      "external": true,
+      "expertise": ["return on equity", "cost of capital", "DCF and CAPM modeling"]
+    },
+    {
+      "id": "W-006",
+      "name": "Rajesh Kothapalli-Nielsen",
+      "title": "VP Integrated Grid Planning",
+      "external": false,
+      "expertise": ["capital plan", "grid modernization", "T&D investment justification"]
+    }
+  ],
+  "intervenors": [
+    {
+      "id": "IV-001",
+      "short_name": "CPUC-X Staff",
+      "full_name": "Staff of the Cascadia Public Utilities Commission",
+      "kind": "staff",
+      "typical_position": "moderate cost discipline, ROE near regional median"
+    },
+    {
+      "id": "IV-002",
+      "short_name": "Office of Consumer Advocacy",
+      "full_name": "Office of the Cascadia Consumer Advocate",
+      "kind": "consumer_advocate",
+      "typical_position": "lower ROE, longer depreciation lives, capex scrutiny"
+    },
+    {
+      "id": "IV-003",
+      "short_name": "Cascadia Industrial Energy Users",
+      "full_name": "Cascadia Industrial Energy Users Coalition (CIEUC)",
+      "kind": "industrial",
+      "typical_position": "favor industrial-class rate design, oppose residential subsidies, marginal-cost based design"
+    },
+    {
+      "id": "IV-004",
+      "short_name": "Cascadia Climate Action",
+      "full_name": "Cascadia Climate Action Coalition (CCAC)",
+      "kind": "environmental",
+      "typical_position": "advocate decarbonization, beneficial electrification, gas-system reductions, low-income protections"
+    }
+  ],
+  "prior_orders": [
+    {
+      "docket": "NLPG-22-005",
+      "order_no": "Order 22-1184",
+      "issued_date": "2023-04-18",
+      "title": "Final Order in NLPG 2022 General Rate Case",
+      "headline_outcomes": [
+        "Authorized ROE of 9.55% (settled)",
+        "Authorized 50.0% common equity in capital structure",
+        "Approved $124M of $168M requested revenue increase (electric)",
+        "Adopted Company-proposed depreciation rates with minor adjustments to T&D mass property",
+        "Approved residential decoupling mechanism continuation",
+        "Rejected industrial-class demand-charge restructuring proposal"
+      ]
+    },
+    {
+      "docket": "NLPG-24-003",
+      "order_no": "Order 24-0772",
+      "issued_date": "2024-09-30",
+      "title": "Final Order in NLPG ROE-Only Proceeding",
+      "headline_outcomes": [
+        "Confirmed authorized ROE at 9.55% (no change)",
+        "Adopted updated proxy group methodology",
+        "Declined to re-open capital structure"
+      ]
+    },
+    {
+      "docket": "NLPG-20-007",
+      "order_no": "Order 21-0091",
+      "issued_date": "2021-02-11",
+      "title": "Final Order in NLPG 2020 General Rate Case",
+      "headline_outcomes": [
+        "Authorized ROE of 9.40% (litigated)",
+        "Authorized 49.5% common equity",
+        "Approved $96M of $135M requested",
+        "Established three-year wildfire mitigation tracker"
+      ]
+    }
+  ],
+  "active_case": {
+    "docket": "NLPG-26-001",
+    "title": "Application of Northern Light Power & Gas Company for Authority to Increase Rates and Charges",
+    "filed_date": "2026-01-21",
+    "phase": "discovery",
+    "test_year": 2026,
+    "future_test_year": true,
+    "headline_request": "$168.4M revenue requirement increase (combined electric + gas)",
+    "key_issues": [
+      "Requested ROE of 10.10% (vs. 9.55% authorized)",
+      "Equity layer increase to 51.5%",
+      "Grid modernization capex of $845M (2026)",
+      "Wildfire mitigation incremental O&M of $42M/yr",
+      "Updated depreciation rates reflecting decarbonization-driven gas asset retirement",
+      "Beneficial electrification rider proposal",
+      "Low-income discount expansion to 22% of bill"
+    ]
+  },
+  "topic_vocabulary": [
+    "roe", "cost_of_capital", "capital_structure", "rate_base", "depreciation_method",
+    "depreciation_rates", "om_expense", "capex_justification_grid_modernization",
+    "capex_justification_wildfire", "capex_justification_gas_safety",
+    "rate_design", "customer_class_allocation", "billing_determinants",
+    "decarbonization_stance", "beneficial_electrification", "reliability_metric",
+    "affordability_program", "settlement_principle", "low_income_discount",
+    "resource_planning", "demand_response", "energy_efficiency"
+  ]
+}
