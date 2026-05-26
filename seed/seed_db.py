@@ -865,7 +865,7 @@ def main() -> int:
 
 
 async def _seed_lifecycle_extras(engine) -> None:
-    log.info("Seeding lifecycle: extra cases + positions / orders / settlements / hearings…")
+    log.info("Seeding lifecycle: extra cases + positions / orders / settlements / hearings / agent_memory…")
     async with engine.begin() as conn:
         # --- Extra cases at different lifecycle stages ----------------------
         # Make sure we have at least one case per lifecycle stage so the
@@ -1093,6 +1093,42 @@ async def _seed_lifecycle_extras(engine) -> None:
                 "  AND NOT EXISTS ( "
                 "    SELECT 1 FROM testimony t "
                 "    WHERE t.case_id = c.id AND t.title = src.title "
+                "  )"
+            )
+        )
+
+        # Agent memory rows for closed cases — positions taken with outcomes.
+        # These are what the Cross-case Insights endpoint joins against, and
+        # what the drafter agent surfaces as "what we said on this topic before".
+        await conn.execute(
+            text(
+                "INSERT INTO agent_memory ( "
+                "  id, case_id, jurisdiction, topic_key, fact_text, rationale, "
+                "  confidence, is_active "
+                ") "
+                "SELECT gen_random_uuid(), c.id, c.jurisdiction, src.topic_key, "
+                "       src.fact, src.rationale, src.conf, TRUE "
+                "FROM cases c, (VALUES "
+                # NLPG-22-005 outcomes
+                "  ('NLPG-22-005','roe','Authorized ROE of 9.55% on 52/48 capital structure (vs Company''s 9.85% on 54/46). 30 bps below request, citing DCF analysis of comparable utilities.','Commission accepted Staff''s proxy group but rejected its DCF assumptions.',0.95),"
+                "  ('NLPG-22-005','capital_structure','Equity ratio capped at 52% (vs Company''s requested 54%). Commission cited national peer median of 51-53% as benchmark.','Aligned with OCA position but slightly above OCA''s 50% request.',0.95),"
+                "  ('NLPG-22-005','depreciation','Approved updated Iowa curves for distribution; rejected 12% rate increase requested for distribution depreciation pending refresh study by Q4 2024.','Compromise outcome — refresh ordered before further increases.',0.92),"
+                "  ('NLPG-22-005','capex','Disallowed $42M of proposed gas distribution capex as not yet used-and-useful; remainder approved.','Specific disallowance per project; rest of capex prudent.',0.90),"
+                "  ('NLPG-22-005','revenue_requirement','Authorized $118.2M revenue increase (vs $142.0M request). 17% reduction driven by ROE, equity cap, and capex disallowance.','Cumulative effect of multiple adjustments.',0.95),"
+                "  ('NLPG-22-005','cost_of_service','Adopted Company''s minimum-distribution-system methodology over CIEUC''s objection.','Industrial allocation argument rejected.',0.88),"
+                # NLPG-24-003 outcomes (ROE-only proceeding)
+                "  ('NLPG-24-003','roe','Authorized 9.70% ROE — 15 bps step-up from 2023 order, reflecting capital market shift. Company requested 9.85%; Staff proposed 9.50%.','Commission split the difference acknowledging risk-free rate increase.',0.95),"
+                "  ('NLPG-24-003','capital_structure','Retained 52/48 equity ratio from prior case; not at issue in this limited proceeding.','Not litigated.',0.90),"
+                # NLPG-20-007 outcomes (historical 2020 GRC)
+                "  ('NLPG-20-007','roe','Authorized 9.40% ROE on 50/50 capital structure (vs Company''s requested 10.05% on 55/45). Commission cited then-low interest rate environment.','Decade-low ROE reflecting 2020-21 capital markets.',0.85),"
+                "  ('NLPG-20-007','depreciation','Approved Concentric depreciation study with no material changes from prior case.','Routine approval.',0.85),"
+                "  ('NLPG-20-007','capex','Disallowed $58M of distribution capex (16% of request) as imprudent or premature.','Largest disallowance to date.',0.85),"
+                "  ('NLPG-20-007','revenue_requirement','Authorized $96.5M increase (vs $135M request) — 28% reduction. Largest gap between request and outcome in 15 years.','Combination of ROE cut + equity cap + capex disallowance.',0.85) "
+                ") AS src(docket, topic_key, fact, rationale, conf) "
+                "WHERE c.docket_number = src.docket "
+                "  AND NOT EXISTS ( "
+                "    SELECT 1 FROM agent_memory m "
+                "    WHERE m.case_id = c.id AND m.topic_key = src.topic_key "
                 "  )"
             )
         )
