@@ -34,6 +34,14 @@ import CrossCaseInsights from "./routes/case/CrossCaseInsights";
 import CompliancePage from "./routes/case/Compliance";
 import HearingPrep from "./routes/case/HearingPrep";
 import AdminAutomation from "./routes/admin/Automation";
+import ApplicationWorkbench from "./routes/case/ApplicationWorkbench";
+import Stakeholders from "./routes/case/Stakeholders";
+import PublicCommentsPage from "./routes/case/PublicComments";
+import AljRecommendation from "./routes/case/AljRecommendation";
+import PublicNoticePage from "./routes/case/PublicNotice";
+import SettlementsPage from "./routes/case/Settlements";
+import OutboundDiscovery from "./routes/case/OutboundDiscovery";
+import IntervenorTestimonyPage from "./routes/case/IntervenorTestimony";
 
 import AdminShell from "./shell/AdminShell";
 import AdminCases from "./routes/admin/Cases";
@@ -180,6 +188,31 @@ const caseHearingPrepRoute = createRoute({
   component: HearingPrep,
 });
 
+const caseAppWorkbenchRoute = createRoute({
+  getParentRoute: () => caseRoute, path: "application-workbench", component: ApplicationWorkbench,
+});
+const caseStakeholdersRoute = createRoute({
+  getParentRoute: () => caseRoute, path: "stakeholders", component: Stakeholders,
+});
+const casePublicCommentsRoute = createRoute({
+  getParentRoute: () => caseRoute, path: "public-comments", component: PublicCommentsPage,
+});
+const caseAljRoute = createRoute({
+  getParentRoute: () => caseRoute, path: "alj-recommendation", component: AljRecommendation,
+});
+const casePublicNoticeRoute = createRoute({
+  getParentRoute: () => caseRoute, path: "public-notice", component: PublicNoticePage,
+});
+const caseSettlementsRoute = createRoute({
+  getParentRoute: () => caseRoute, path: "settlements", component: SettlementsPage,
+});
+const caseOutboundDiscoveryRoute = createRoute({
+  getParentRoute: () => caseRoute, path: "discovery-outbound", component: OutboundDiscovery,
+});
+const caseIntervenorTestimonyRoute = createRoute({
+  getParentRoute: () => caseRoute, path: "intervenor-testimony", component: IntervenorTestimonyPage,
+});
+
 const portfolioRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "portfolio",
@@ -272,6 +305,14 @@ const routeTree = rootRoute.addChildren([
     caseCrossCaseRoute,
     caseComplianceRoute,
     caseHearingPrepRoute,
+    caseAppWorkbenchRoute,
+    caseStakeholdersRoute,
+    casePublicCommentsRoute,
+    caseAljRoute,
+    casePublicNoticeRoute,
+    caseSettlementsRoute,
+    caseOutboundDiscoveryRoute,
+    caseIntervenorTestimonyRoute,
   ]),
   adminRoute.addChildren([
     adminIndexRoute,
