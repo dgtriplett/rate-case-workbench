@@ -649,7 +649,9 @@ class PublicComment(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     case_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cases.id", ondelete="CASCADE"))
-    source: Mapped[str] = mapped_column(String(32), default="email")  # email|portal|letter|oral|other
+    source: Mapped[str] = mapped_column(String(32), default="email")  # email|portal|letter|oral|social_media|other
+    platform: Mapped[Optional[str]] = mapped_column(String(32))  # twitter|facebook|reddit|nextdoor|youtube
+    source_handle: Mapped[Optional[str]] = mapped_column(String(128))
     commenter_name: Mapped[Optional[str]] = mapped_column(String(255))
     commenter_org: Mapped[Optional[str]] = mapped_column(String(255))
     body: Mapped[str] = mapped_column(Text)

@@ -144,6 +144,8 @@ async def _bootstrap_schema() -> None:
             ("data_requests", "direction", "VARCHAR(16) DEFAULT 'inbound'"),
             ("data_requests", "target_party_id", "UUID"),
             ("hearings", "kind", "VARCHAR(32) DEFAULT 'evidentiary'"),
+            ("public_comments", "platform", "VARCHAR(32)"),
+            ("public_comments", "source_handle", "VARCHAR(128)"),
         ]
         for tbl, col, coltype in add_columns:
             try:

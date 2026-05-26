@@ -390,6 +390,8 @@ export const api = {
     request<any>(`/public-comments`, { method: "POST", json: body }),
   deletePublicComment: (id: string) =>
     request<any>(`/public-comments/${id}`, { method: "DELETE" }),
+  ingestSocialComments: (case_id: string, body: any = {}) =>
+    request<any>(`/public-comments/ingest-social${qs({ case_id })}`, { method: "POST", json: body }),
 
   // ---- ALJ Recommendation ----
   getAljRecommendation: (case_id: string) =>

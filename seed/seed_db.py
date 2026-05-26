@@ -951,6 +951,8 @@ async def _ensure_lifecycle_schema(engine) -> None:
             "ALTER TABLE data_requests ADD COLUMN IF NOT EXISTS direction VARCHAR(16) DEFAULT 'inbound'",
             "ALTER TABLE data_requests ADD COLUMN IF NOT EXISTS target_party_id UUID",
             "ALTER TABLE hearings ADD COLUMN IF NOT EXISTS kind VARCHAR(32) DEFAULT 'evidentiary'",
+            "ALTER TABLE public_comments ADD COLUMN IF NOT EXISTS platform VARCHAR(32)",
+            "ALTER TABLE public_comments ADD COLUMN IF NOT EXISTS source_handle VARCHAR(128)",
         ]:
             try:
                 await conn.execute(text(stmt))
@@ -1234,6 +1236,32 @@ async def _seed_lifecycle_extras(engine) -> None:
         ") AS src(source, name, org, body, tags, sent, rdate) "
         "JOIN cases c ON c.docket_number = 'NLPG-26-001' "
         "WHERE NOT EXISTS (SELECT 1 FROM public_comments pc WHERE pc.case_id = c.id AND pc.commenter_name = src.name AND pc.received_date = CAST(src.rdate AS DATE))"
+    )
+
+    # Pre-seeded social-media comments — demonstrates the ingestion stream
+    # (Twitter, Facebook, Reddit, Nextdoor, YouTube). The app's
+    # `/api/v1/public-comments/ingest-social` endpoint pulls more on demand.
+    await _try("public_comments_social",
+        "INSERT INTO public_comments (id, case_id, source, platform, source_handle, commenter_name, body, topic_tags, sentiment, received_date) "
+        "SELECT gen_random_uuid(), c.id, 'social_media', src.platform, src.handle, src.display_name, "
+        "       src.body, CAST(src.tags AS TEXT[]), src.sentiment, CAST(src.rdate AS DATE) "
+        "FROM (VALUES "
+        "  ('twitter','@CascadiaRatePayer','Jamie Park','Another year, another @NLPGUtility rate hike while their CEO took home a $4M bonus. Where is the accountability? #UtilityRateCase #PayMyBill',ARRAY['rate-increase','executive-pay']::TEXT[],'negative','2026-04-29'),"
+        "  ('twitter','@GreenCascadia','Green Cascadia','@CPUC_X must reject NLPG''s $480M gas-main replacement plan. Locking in fossil infrastructure when the state has a 2045 zero-emissions target = stranded assets on ratepayers. #DecarbCascadia',ARRAY['decarbonization','gas','capex']::TEXT[],'negative','2026-04-30'),"
+        "  ('facebook',NULL,'Lena Brooks','My grandma is on a fixed income and can barely afford her bill. If NLPG raises rates again she will have to choose between heat and medicine. The commission needs to think about real people.',ARRAY['low-income','rate-increase','seniors']::TEXT[],'negative','2026-05-01'),"
+        "  ('facebook',NULL,'Cascadia Climate Action','Tell the CPUC-X to reject NLPG''s plan to keep expanding gas service. We need renewable investment, not 50 more years of methane infrastructure. Sign our public comment letter — link in bio.',ARRAY['decarbonization','renewables']::TEXT[],'negative','2026-05-02'),"
+        "  ('reddit','u/cascadia_engineer','Dev T.','I get that the grid needs investment after the 2024 outages, but a 12% increase feels excessive. Some of these capex projects need a hard prudence review — discovery should dig into the engineering basis.',ARRAY['reliability','capex','prudence']::TEXT[],'mixed','2026-05-03'),"
+        "  ('reddit','u/electric_eel_42','ElectricEel42','I don''t love a rate increase either, but the wildfire hardening they''re proposing is the kind of capex we actually need. Pay now or pay way more after the next fire.',ARRAY['reliability','climate','capex']::TEXT[],'positive','2026-05-04'),"
+        "  ('nextdoor',NULL,'Maple Heights neighbor','Tired of NLPG asking for more money when our neighborhood lost power 4 times this winter. Fix the lines THEN ask for the raise.',ARRAY['storm-recovery','reliability']::TEXT[],'negative','2026-05-05'),"
+        "  ('nextdoor',NULL,'Riverside HOA','Saw the public-notice flyer. We support a smaller increase tied to the wildfire mitigation work but not the full request.',ARRAY['rate-increase','reliability']::TEXT[],'mixed','2026-05-06'),"
+        "  ('youtube','@LocalNewsCascadia','Local News Cascadia','Coverage of the NLPG rate case. Small business owners we spoke to are split — some say grid investment is overdue, others say a 12% hike will close their doors.',ARRAY['rate-increase','small-business']::TEXT[],'mixed','2026-05-07'),"
+        "  ('twitter','@evdriverCDA','Cascadia EV Driver','EV rates are still a mess. Time-of-use is fine but the demand charge surprise on my last bill was brutal. Fix the rate design while you are at it. #NLPG',ARRAY['rate-design','EV','time-of-use']::TEXT[],'mixed','2026-05-08') "
+        ") AS src(platform, handle, display_name, body, tags, sentiment, rdate) "
+        "JOIN cases c ON c.docket_number = 'NLPG-26-001' "
+        "WHERE NOT EXISTS ("
+        "  SELECT 1 FROM public_comments pc "
+        "  WHERE pc.case_id = c.id AND pc.source = 'social_media' AND pc.body = src.body"
+        ")"
     )
 
     # Intervenor testimony filings (full opposing testimony)
