@@ -26,6 +26,7 @@ import {
 import { useCaseContext } from "@/lib/case-context";
 import { PhaseTimeline } from "@/components/PhaseTimeline";
 import { PageHeader } from "@/components/PageHeader";
+import { ProcessFlow } from "@/components/ProcessFlow";
 import { Badge } from "@/components/ui/badge";
 import { DrStatusBadge, PriorityBadge } from "@/components/StatusBadges";
 import { daysUntil, fmtDate, fmtRelative } from "@/lib/format";
@@ -119,6 +120,13 @@ export default function CaseHome() {
       />
 
       <div className="grid grid-cols-1 gap-5 p-6 lg:grid-cols-3">
+        <div className="lg:col-span-3">
+          <ProcessFlow
+            caseId={caseId}
+            phases={phasesQ.data}
+            caseStatus={caseData?.status}
+          />
+        </div>
         {/* KPIs */}
         <Card className="lg:col-span-3">
           <CardContent className="grid grid-cols-2 gap-4 p-4 md:grid-cols-4">

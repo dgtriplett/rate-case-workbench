@@ -18,6 +18,8 @@ from .db import session_scope, shutdown_db
 from .models import Base, Role, RoleKey
 from .routers import (
     agent,
+    alj_recommendation,
+    application_workbench,
     automation,
     calendar as calendar_router,
     cases,
@@ -30,14 +32,18 @@ from .routers import (
     drafts,
     hearing_prep,
     hearings,
+    intervenor_testimony,
     knowledge,
     memory,
     notifications,
     orders,
+    parties,
     phases,
     portfolio,
     positions_ledger,
     presence,
+    public_comments,
+    public_notice,
     rebuttal,
     responses,
     settlements,
@@ -101,6 +107,9 @@ async def _bootstrap_schema() -> None:
             "genie_rooms", "vector_indices", "events",
             "intervenor_positions", "commission_orders", "settlements", "hearings",
             "cross_exam_qa", "compliance_filings", "automation_rules", "presence_records",
+            "application_packages", "financial_schedules", "cost_of_service_studies",
+            "rate_design_proposals", "parties", "public_comments",
+            "alj_recommendations", "intervenor_testimony", "public_notices",
         ]
         for tbl in uuid_pk_tables:
             try:
@@ -120,12 +129,21 @@ async def _bootstrap_schema() -> None:
             ("settlements", "parties"),
             ("hearings", "witness_lineup"),
             ("hearings", "topics"),
+            ("cost_of_service_studies", "source_uc_tables"),
+            ("public_comments", "topic_tags"),
+            ("alj_recommendations", "positions_adopted"),
+            ("alj_recommendations", "positions_rejected"),
+            ("intervenor_testimony", "topics"),
+            ("public_notices", "channels"),
         ]
 
         # Add columns added to existing tables after their initial creation.
         # `Base.metadata.create_all` does not ALTER existing tables.
         add_columns = [
             ("testimony", "rebuts_position_ids", "TEXT[]"),
+            ("data_requests", "direction", "VARCHAR(16) DEFAULT 'inbound'"),
+            ("data_requests", "target_party_id", "UUID"),
+            ("hearings", "kind", "VARCHAR(32) DEFAULT 'evidentiary'"),
         ]
         for tbl, col, coltype in add_columns:
             try:
@@ -227,6 +245,12 @@ def create_app() -> FastAPI:
     app.include_router(portfolio.router, prefix=api_prefix)
     app.include_router(automation.router, prefix=api_prefix)
     app.include_router(presence.router, prefix=api_prefix)
+    app.include_router(application_workbench.router, prefix=api_prefix)
+    app.include_router(parties.router, prefix=api_prefix)
+    app.include_router(public_comments.router, prefix=api_prefix)
+    app.include_router(alj_recommendation.router, prefix=api_prefix)
+    app.include_router(intervenor_testimony.router, prefix=api_prefix)
+    app.include_router(public_notice.router, prefix=api_prefix)
 
     admin_prefix = "/api/v1/admin"
     app.include_router(admin_cases.router, prefix=admin_prefix)

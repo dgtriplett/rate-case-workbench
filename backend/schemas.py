@@ -111,6 +111,8 @@ class DataRequestCreate(BaseModel):
     body: str
     priority: str = "normal"
     topic_tags: list[str] = Field(default_factory=list)
+    direction: str = "inbound"
+    target_party_id: Optional[uuid.UUID] = None
 
 
 class DataRequestAssign(BaseModel):
@@ -134,6 +136,8 @@ class DataRequestOut(ORMModel):
     topic_tags: list[str]
     assigned_witness_id: Optional[uuid.UUID]
     assigned_reviewer_id: Optional[uuid.UUID]
+    direction: str = "inbound"
+    target_party_id: Optional[uuid.UUID] = None
     created_at: datetime
     updated_at: datetime
 

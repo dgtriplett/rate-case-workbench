@@ -123,6 +123,7 @@ export const api = {
     case_id?: string;
     status?: string;
     assigned_witness_id?: string;
+    direction?: string;
   }) =>
     request<DataRequestOut[]>(`/data-requests${qs(params)}`),
   getDataRequest: (id: string) =>
@@ -337,6 +338,86 @@ export const api = {
     request<any>("/presence/heartbeat", { method: "POST", json: body }),
   presenceList: (target_kind: string, target_id: string) =>
     request<any>(`/presence${qs({ target_kind, target_id })}`),
+
+  // ---- Application Workbench (pre-filing) ----
+  getWorkbenchSnapshot: (case_id: string) =>
+    request<any>(`/application-workbench/snapshot${qs({ case_id })}`),
+  upsertApplicationPackage: (case_id: string, body: any) =>
+    request<any>(`/application-workbench/${case_id}`, { method: "PUT", json: body }),
+  fileApplication: (case_id: string) =>
+    request<any>(`/application-workbench/${case_id}/file`, { method: "POST" }),
+  listFinancialSchedules: (case_id: string) =>
+    request<any[]>(`/application-workbench/financial-schedules${qs({ case_id })}`),
+  createFinancialSchedule: (body: any) =>
+    request<any>(`/application-workbench/financial-schedules`, { method: "POST", json: body }),
+  updateFinancialSchedule: (id: string, body: any) =>
+    request<any>(`/application-workbench/financial-schedules/${id}`, { method: "PATCH", json: body }),
+  deleteFinancialSchedule: (id: string) =>
+    request<any>(`/application-workbench/financial-schedules/${id}`, { method: "DELETE" }),
+  listCostOfService: (case_id: string) =>
+    request<any[]>(`/application-workbench/cost-of-service${qs({ case_id })}`),
+  createCostOfService: (body: any) =>
+    request<any>(`/application-workbench/cost-of-service`, { method: "POST", json: body }),
+  updateCostOfService: (id: string, body: any) =>
+    request<any>(`/application-workbench/cost-of-service/${id}`, { method: "PATCH", json: body }),
+  deleteCostOfService: (id: string) =>
+    request<any>(`/application-workbench/cost-of-service/${id}`, { method: "DELETE" }),
+  listRateDesign: (case_id: string) =>
+    request<any[]>(`/application-workbench/rate-design${qs({ case_id })}`),
+  createRateDesign: (body: any) =>
+    request<any>(`/application-workbench/rate-design`, { method: "POST", json: body }),
+  updateRateDesign: (id: string, body: any) =>
+    request<any>(`/application-workbench/rate-design/${id}`, { method: "PATCH", json: body }),
+  deleteRateDesign: (id: string) =>
+    request<any>(`/application-workbench/rate-design/${id}`, { method: "DELETE" }),
+
+  // ---- Parties / stakeholder registry ----
+  listParties: (case_id: string) =>
+    request<any[]>(`/parties${qs({ case_id })}`),
+  createParty: (body: any) =>
+    request<any>(`/parties`, { method: "POST", json: body }),
+  updateParty: (id: string, body: any) =>
+    request<any>(`/parties/${id}`, { method: "PATCH", json: body }),
+  deleteParty: (id: string) =>
+    request<any>(`/parties/${id}`, { method: "DELETE" }),
+
+  // ---- Public comments ----
+  listPublicComments: (case_id: string) =>
+    request<any[]>(`/public-comments${qs({ case_id })}`),
+  publicCommentsSummary: (case_id: string) =>
+    request<any>(`/public-comments/summary${qs({ case_id })}`),
+  createPublicComment: (body: any) =>
+    request<any>(`/public-comments`, { method: "POST", json: body }),
+  deletePublicComment: (id: string) =>
+    request<any>(`/public-comments/${id}`, { method: "DELETE" }),
+
+  // ---- ALJ Recommendation ----
+  getAljRecommendation: (case_id: string) =>
+    request<any>(`/alj-recommendation/by-case/${case_id}`),
+  upsertAljRecommendation: (case_id: string, body: any) =>
+    request<any>(`/alj-recommendation/by-case/${case_id}`, { method: "PUT", json: body }),
+  compareAljVsOrder: (case_id: string) =>
+    request<any>(`/alj-recommendation/compare/${case_id}`),
+
+  // ---- Intervenor testimony (full filings) ----
+  listIntervenorTestimony: (case_id: string) =>
+    request<any[]>(`/intervenor-testimony${qs({ case_id })}`),
+  createIntervenorTestimony: (body: any) =>
+    request<any>(`/intervenor-testimony`, { method: "POST", json: body }),
+  updateIntervenorTestimony: (id: string, body: any) =>
+    request<any>(`/intervenor-testimony/${id}`, { method: "PATCH", json: body }),
+  deleteIntervenorTestimony: (id: string) =>
+    request<any>(`/intervenor-testimony/${id}`, { method: "DELETE" }),
+
+  // ---- Public notices ----
+  listPublicNotices: (case_id: string) =>
+    request<any[]>(`/public-notices${qs({ case_id })}`),
+  createPublicNotice: (body: any) =>
+    request<any>(`/public-notices`, { method: "POST", json: body }),
+  updatePublicNotice: (id: string, body: any) =>
+    request<any>(`/public-notices/${id}`, { method: "PATCH", json: body }),
+  draftPublicNotice: (case_id: string) =>
+    request<any>(`/public-notices/draft/${case_id}`, { method: "POST" }),
 
   // ---- Documents / Knowledge ----
   listDocuments: (caseId?: string) =>

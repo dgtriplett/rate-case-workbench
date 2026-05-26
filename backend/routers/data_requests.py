@@ -21,6 +21,7 @@ async def list_drs(
     case_id: Optional[uuid.UUID] = Query(default=None),
     status: Optional[str] = Query(default=None),
     assigned_witness_id: Optional[uuid.UUID] = Query(default=None),
+    direction: Optional[str] = Query(default=None),
 ) -> list[DataRequestOut]:
     q = select(DataRequest)
     if case_id:
@@ -29,6 +30,8 @@ async def list_drs(
         q = q.where(DataRequest.status == DRStatus(status))
     if assigned_witness_id:
         q = q.where(DataRequest.assigned_witness_id == assigned_witness_id)
+    if direction:
+        q = q.where(DataRequest.direction == direction)
     q = q.order_by(DataRequest.due_date.asc(), DataRequest.created_at.desc()).limit(2000)
     res = await session.execute(q)
     return [DataRequestOut.model_validate(d) for d in res.scalars().all()]
@@ -48,6 +51,8 @@ async def create_dr(body: DataRequestCreate, session: DBSession, user: CurrentUs
         body=body.body,
         priority=body.priority,
         topic_tags=body.topic_tags,
+        direction=body.direction,
+        target_party_id=body.target_party_id,
     )
     session.add(dr)
     await session.flush()

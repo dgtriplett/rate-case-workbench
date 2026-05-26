@@ -252,6 +252,8 @@ class DataRequest(Base):
     topic_tags: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     assigned_witness_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("witnesses.id"))
     assigned_reviewer_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"))
+    direction: Mapped[str] = mapped_column(String(16), default="inbound")  # inbound | outbound
+    target_party_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("parties.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -439,6 +441,7 @@ class Hearing(Base):
     topics: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     notes: Mapped[Optional[str]] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(32), default="scheduled")  # scheduled | completed | cancelled
+    kind: Mapped[str] = mapped_column(String(32), default="evidentiary")  # evidentiary | public
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -537,6 +540,193 @@ class PresenceRecord(Base):
     target_kind: Mapped[str] = mapped_column(String(64))  # testimony | response | brief
     target_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     last_heartbeat: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Pre-filing: Application Workbench + supporting artifacts
+# ---------------------------------------------------------------------------
+
+
+class ApplicationPackage(Base):
+    __tablename__ = "application_packages"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    case_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cases.id", ondelete="CASCADE"), unique=True)
+    title: Mapped[str] = mapped_column(String(255))
+    target_filing_date: Mapped[Optional[date]] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(32), default="in_prep")  # in_prep | ready | filed
+    filed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    locked_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"))
+    summary: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class FinancialSchedule(Base):
+    __tablename__ = "financial_schedules"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    case_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cases.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(255))
+    kind: Mapped[str] = mapped_column(String(64))  # income_statement|balance_sheet|cash_flow|rate_base|capex|om|custom
+    status: Mapped[str] = mapped_column(String(32), default="not_started")  # not_started|in_progress|complete
+    owner_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"))
+    document_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("documents.id"))
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class CostOfServiceStudy(Base):
+    __tablename__ = "cost_of_service_studies"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    case_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cases.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(255))
+    study_type: Mapped[str] = mapped_column(String(64), default="embedded")
+    source_uc_tables: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    summary: Mapped[Optional[str]] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(32), default="in_progress")
+    document_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("documents.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class RateDesignProposal(Base):
+    __tablename__ = "rate_design_proposals"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    case_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cases.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(255))
+    proposed_structure: Mapped[dict] = mapped_column(JSONB, default=dict)
+    bill_impact_summary: Mapped[Optional[str]] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(32), default="draft")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Stakeholder registry — intervening parties + their counsel
+# ---------------------------------------------------------------------------
+
+
+class Party(Base):
+    __tablename__ = "parties"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    case_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cases.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(255))
+    kind: Mapped[str] = mapped_column(String(64))  # utility|staff|consumer_advocate|industrial|environmental|individual|other
+    counsel_name: Mapped[Optional[str]] = mapped_column(String(255))
+    counsel_email: Mapped[Optional[str]] = mapped_column(String(255))
+    counsel_firm: Mapped[Optional[str]] = mapped_column(String(255))
+    intervention_date: Mapped[Optional[date]] = mapped_column(Date)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Public comments
+# ---------------------------------------------------------------------------
+
+
+class PublicComment(Base):
+    __tablename__ = "public_comments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    case_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cases.id", ondelete="CASCADE"))
+    source: Mapped[str] = mapped_column(String(32), default="email")  # email|portal|letter|oral|other
+    commenter_name: Mapped[Optional[str]] = mapped_column(String(255))
+    commenter_org: Mapped[Optional[str]] = mapped_column(String(255))
+    body: Mapped[str] = mapped_column(Text)
+    topic_tags: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    sentiment: Mapped[str] = mapped_column(String(16), default="neutral")  # positive|neutral|negative|mixed
+    received_date: Mapped[Optional[date]] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ---------------------------------------------------------------------------
+# ALJ recommendation — distinct from final commission order
+# ---------------------------------------------------------------------------
+
+
+class ALJRecommendation(Base):
+    __tablename__ = "alj_recommendations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    case_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cases.id", ondelete="CASCADE"), unique=True)
+    alj_name: Mapped[Optional[str]] = mapped_column(String(255))
+    issued_date: Mapped[Optional[date]] = mapped_column(Date)
+    recommended_revenue_increase_m: Mapped[Optional[float]] = mapped_column()
+    recommended_roe_pct: Mapped[Optional[float]] = mapped_column()
+    recommended_equity_pct: Mapped[Optional[float]] = mapped_column()
+    capex_recommended_m: Mapped[Optional[float]] = mapped_column()
+    summary: Mapped[Optional[str]] = mapped_column(Text)
+    positions_adopted: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    positions_rejected: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    document_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("documents.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Intervenor testimony (full filings tracked as their own entity)
+# ---------------------------------------------------------------------------
+
+
+class IntervenorTestimony(Base):
+    __tablename__ = "intervenor_testimony"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    case_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cases.id", ondelete="CASCADE"))
+    party_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("parties.id"))
+    witness_name: Mapped[str] = mapped_column(String(255))
+    witness_title: Mapped[Optional[str]] = mapped_column(String(255))
+    kind: Mapped[str] = mapped_column(String(32))  # direct | rebuttal | surrebuttal
+    title: Mapped[str] = mapped_column(String(512))
+    filed_date: Mapped[Optional[date]] = mapped_column(Date)
+    document_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("documents.id"))
+    topics: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    summary: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Public notices
+# ---------------------------------------------------------------------------
+
+
+class PublicNotice(Base):
+    __tablename__ = "public_notices"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    case_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cases.id", ondelete="CASCADE"))
+    title: Mapped[str] = mapped_column(String(255))
+    body: Mapped[str] = mapped_column(Text)
+    channels: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)  # newspaper|web|bill_insert|email
+    publication_date: Mapped[Optional[date]] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(32), default="draft")  # draft|approved|published
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 

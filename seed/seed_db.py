@@ -864,8 +864,103 @@ def main() -> int:
 # ---------------------------------------------------------------------------
 
 
+async def _ensure_lifecycle_schema(engine) -> None:
+    """Idempotent schema bring-up for Tier-1/2/3 entities. The FastAPI app
+    bootstraps these on startup too, but the seed pipeline can run against
+    a cold Lakebase before the app has restarted — so we mirror the ALTER /
+    CREATE statements here so the seed is self-sufficient."""
+    log.info("Ensuring lifecycle schema (new tables + columns) is up to date…")
+    async with engine.begin() as conn:
+        # New tables (idempotent CREATE IF NOT EXISTS)
+        for stmt in [
+            "CREATE TABLE IF NOT EXISTS application_packages ("
+            " id UUID PRIMARY KEY DEFAULT gen_random_uuid(),"
+            " case_id UUID UNIQUE NOT NULL REFERENCES cases(id) ON DELETE CASCADE,"
+            " title VARCHAR(255) NOT NULL, target_filing_date DATE,"
+            " status VARCHAR(32) DEFAULT 'in_prep', filed_at TIMESTAMPTZ,"
+            " locked_by_user_id UUID, summary TEXT,"
+            " created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now())",
+            "CREATE TABLE IF NOT EXISTS financial_schedules ("
+            " id UUID PRIMARY KEY DEFAULT gen_random_uuid(),"
+            " case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,"
+            " name VARCHAR(255) NOT NULL, kind VARCHAR(64) NOT NULL,"
+            " status VARCHAR(32) DEFAULT 'not_started',"
+            " owner_user_id UUID, document_id UUID, notes TEXT,"
+            " created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now())",
+            "CREATE TABLE IF NOT EXISTS cost_of_service_studies ("
+            " id UUID PRIMARY KEY DEFAULT gen_random_uuid(),"
+            " case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,"
+            " name VARCHAR(255) NOT NULL, study_type VARCHAR(64) DEFAULT 'embedded',"
+            " source_uc_tables TEXT[] DEFAULT ARRAY[]::TEXT[],"
+            " summary TEXT, status VARCHAR(32) DEFAULT 'in_progress',"
+            " document_id UUID, created_at TIMESTAMPTZ DEFAULT now(),"
+            " updated_at TIMESTAMPTZ DEFAULT now())",
+            "CREATE TABLE IF NOT EXISTS rate_design_proposals ("
+            " id UUID PRIMARY KEY DEFAULT gen_random_uuid(),"
+            " case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,"
+            " name VARCHAR(255) NOT NULL, proposed_structure JSONB DEFAULT '{}',"
+            " bill_impact_summary TEXT, status VARCHAR(32) DEFAULT 'draft',"
+            " created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now())",
+            "CREATE TABLE IF NOT EXISTS parties ("
+            " id UUID PRIMARY KEY DEFAULT gen_random_uuid(),"
+            " case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,"
+            " name VARCHAR(255) NOT NULL, kind VARCHAR(64) NOT NULL,"
+            " counsel_name VARCHAR(255), counsel_email VARCHAR(255),"
+            " counsel_firm VARCHAR(255), intervention_date DATE,"
+            " notes TEXT, is_active BOOLEAN DEFAULT TRUE,"
+            " created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now())",
+            "CREATE TABLE IF NOT EXISTS public_comments ("
+            " id UUID PRIMARY KEY DEFAULT gen_random_uuid(),"
+            " case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,"
+            " source VARCHAR(32) DEFAULT 'email',"
+            " commenter_name VARCHAR(255), commenter_org VARCHAR(255),"
+            " body TEXT NOT NULL, topic_tags TEXT[] DEFAULT ARRAY[]::TEXT[],"
+            " sentiment VARCHAR(16) DEFAULT 'neutral', received_date DATE,"
+            " created_at TIMESTAMPTZ DEFAULT now())",
+            "CREATE TABLE IF NOT EXISTS alj_recommendations ("
+            " id UUID PRIMARY KEY DEFAULT gen_random_uuid(),"
+            " case_id UUID UNIQUE NOT NULL REFERENCES cases(id) ON DELETE CASCADE,"
+            " alj_name VARCHAR(255), issued_date DATE,"
+            " recommended_revenue_increase_m DOUBLE PRECISION,"
+            " recommended_roe_pct DOUBLE PRECISION,"
+            " recommended_equity_pct DOUBLE PRECISION,"
+            " capex_recommended_m DOUBLE PRECISION,"
+            " summary TEXT,"
+            " positions_adopted TEXT[] DEFAULT ARRAY[]::TEXT[],"
+            " positions_rejected TEXT[] DEFAULT ARRAY[]::TEXT[],"
+            " document_id UUID, created_at TIMESTAMPTZ DEFAULT now(),"
+            " updated_at TIMESTAMPTZ DEFAULT now())",
+            "CREATE TABLE IF NOT EXISTS intervenor_testimony ("
+            " id UUID PRIMARY KEY DEFAULT gen_random_uuid(),"
+            " case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,"
+            " party_id UUID REFERENCES parties(id),"
+            " witness_name VARCHAR(255) NOT NULL, witness_title VARCHAR(255),"
+            " kind VARCHAR(32) NOT NULL, title VARCHAR(512) NOT NULL,"
+            " filed_date DATE, document_id UUID,"
+            " topics TEXT[] DEFAULT ARRAY[]::TEXT[],"
+            " summary TEXT, created_at TIMESTAMPTZ DEFAULT now(),"
+            " updated_at TIMESTAMPTZ DEFAULT now())",
+            "CREATE TABLE IF NOT EXISTS public_notices ("
+            " id UUID PRIMARY KEY DEFAULT gen_random_uuid(),"
+            " case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,"
+            " title VARCHAR(255) NOT NULL, body TEXT NOT NULL,"
+            " channels TEXT[] DEFAULT ARRAY[]::TEXT[], publication_date DATE,"
+            " status VARCHAR(32) DEFAULT 'draft',"
+            " created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now())",
+            # Backfill columns on existing tables
+            "ALTER TABLE data_requests ADD COLUMN IF NOT EXISTS direction VARCHAR(16) DEFAULT 'inbound'",
+            "ALTER TABLE data_requests ADD COLUMN IF NOT EXISTS target_party_id UUID",
+            "ALTER TABLE hearings ADD COLUMN IF NOT EXISTS kind VARCHAR(32) DEFAULT 'evidentiary'",
+        ]:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                log.warning("ensure_lifecycle_schema stmt failed: %s … (%s)", stmt[:60], e)
+
+
 async def _seed_lifecycle_extras(engine) -> None:
     log.info("Seeding lifecycle: extra cases + positions / orders / settlements / hearings / agent_memory…")
+    await _ensure_lifecycle_schema(engine)
     async with engine.begin() as conn:
         # --- Extra cases at different lifecycle stages ----------------------
         # Make sure we have at least one case per lifecycle stage so the
@@ -1097,6 +1192,187 @@ async def _seed_lifecycle_extras(engine) -> None:
             )
         )
 
+    # ── New Tier-1/2/3 entities live in their own resilient transactions so
+    # one failure (e.g. missing column when the app's bootstrap hasn't yet
+    # applied an ALTER) does not abort the rest of the seed. ─────────────────
+    async def _try(label: str, sql: str) -> None:
+        try:
+            async with engine.begin() as c2:
+                await c2.execute(text(sql))
+        except Exception as e:
+            log.warning("skipped %s: %s", label, str(e)[:240])
+
+    # Parties (stakeholder registry) — seeded across all cases.
+    await _try("parties",
+        "INSERT INTO parties (id, case_id, name, kind, counsel_name, counsel_firm, intervention_date, is_active) "
+        "SELECT gen_random_uuid(), c.id, src.name, src.kind, src.counsel, src.firm, "
+        "       CAST(src.idate AS DATE), TRUE "
+        "FROM (VALUES "
+        "  ('Northern Light Power & Gas Company','utility','In-house counsel','OGC','2026-01-21'),"
+        "  ('CPUC-X Commission Staff','staff','Linda Cho','CPUC-X OGC','2026-02-15'),"
+        "  ('Office of Consumer Advocacy','consumer_advocate','Aisha Hassan','OCA','2026-02-22'),"
+        "  ('Cascadia Industrial Energy Users Coalition','industrial','Marcus Volkov','Marten Law','2026-03-04'),"
+        "  ('Cascadia Climate Action Coalition','environmental','Priya Reeves','Earthjustice','2026-03-11') "
+        ") AS src(name, kind, counsel, firm, idate) "
+        "JOIN cases c ON c.docket_number = 'NLPG-26-001' "
+        "WHERE NOT EXISTS (SELECT 1 FROM parties p WHERE p.case_id = c.id AND p.name = src.name)"
+    )
+
+    # Public comments — varied sentiment + topics across the active case
+    await _try("public_comments",
+        "INSERT INTO public_comments (id, case_id, source, commenter_name, commenter_org, body, topic_tags, sentiment, received_date) "
+        "SELECT gen_random_uuid(), c.id, src.source, src.name, src.org, src.body, "
+        "       CAST(src.tags AS TEXT[]), src.sent, CAST(src.rdate AS DATE) "
+        "FROM (VALUES "
+        "  ('email','Maria Sanchez','Sanchez Family','I am very concerned about another rate increase. My family is already struggling to pay our bill — please reject this request.',ARRAY['rate-increase','low-income']::TEXT[],'negative','2026-04-08'),"
+        "  ('portal','Carlos Mendez',NULL,'I support investments in grid reliability but am concerned about the size of the proposed ROE.',ARRAY['reliability','roe']::TEXT[],'mixed','2026-04-12'),"
+        "  ('email','Jennifer Wong','Cascadia Small Business Alliance','Small businesses cannot absorb a 12% rate increase. We urge the commission to deeply scrutinize the capital plan.',ARRAY['rate-increase','small-business','capex']::TEXT[],'negative','2026-04-15'),"
+        "  ('letter','Dr. Ahmad Khalil','Cascadia State University','I support the proposed grid hardening investments — climate resilience is essential.',ARRAY['climate','resilience','capex']::TEXT[],'positive','2026-04-17'),"
+        "  ('oral','Anonymous community member',NULL,'Why are executive salaries so high while customers pay more? Please reject excessive compensation.',ARRAY['executive-pay','rate-increase']::TEXT[],'negative','2026-04-22'),"
+        "  ('email','Robert Park','Park Manufacturing Inc','As a large industrial customer we believe the rate design over-recovers from our class. Please review the cost allocation methodology.',ARRAY['rate-design','cost-of-service','industrial']::TEXT[],'negative','2026-04-24'),"
+        "  ('portal','Lisa Tanaka',NULL,'I appreciate the affordability program enhancements but the basic rate hike is still too high for fixed-income seniors.',ARRAY['low-income','affordability','seniors']::TEXT[],'mixed','2026-04-26') "
+        ") AS src(source, name, org, body, tags, sent, rdate) "
+        "JOIN cases c ON c.docket_number = 'NLPG-26-001' "
+        "WHERE NOT EXISTS (SELECT 1 FROM public_comments pc WHERE pc.case_id = c.id AND pc.commenter_name = src.name AND pc.received_date = CAST(src.rdate AS DATE))"
+    )
+
+    # Intervenor testimony filings (full opposing testimony)
+    await _try("intervenor_testimony",
+        "INSERT INTO intervenor_testimony (id, case_id, party_id, witness_name, witness_title, kind, title, filed_date, topics, summary) "
+        "SELECT gen_random_uuid(), c.id, p.id, src.witness, src.title_w, src.kind, src.title, "
+        "       CAST(src.fdate AS DATE), CAST(src.topics AS TEXT[]), src.summ "
+        "FROM (VALUES "
+        "  ('CPUC-X Commission Staff','David Lin','Staff Economist','direct','Staff Direct Testimony — ROE & Capital Structure','2026-04-12',ARRAY['roe','capital-structure']::TEXT[],'Staff recommends 9.25% ROE on 50/50 equity, citing DCF analysis of comparable utilities.'),"
+        "  ('Office of Consumer Advocacy','Aisha Hassan','Senior Policy Analyst','direct','OCA Direct Testimony — Cost of Service & Affordability','2026-04-15',ARRAY['cost-of-service','affordability','low-income']::TEXT[],'OCA recommends capping equity at 50% and expanding low-income discount tiers.'),"
+        "  ('Cascadia Industrial Energy Users Coalition','Marcus Volkov','Industrial Rate Expert','direct','CIEUC Direct Testimony — Rate Design','2026-04-18',ARRAY['rate-design','industrial']::TEXT[],'CIEUC argues the demand allocator over-recovers from industrial class.'),"
+        "  ('Cascadia Climate Action Coalition','Priya Reeves','Climate Policy Director','direct','CCAC Direct Testimony — Gas Capex Prudence','2026-04-20',ARRAY['decarbonization','gas','capex']::TEXT[],'CCAC opposes the $480M gas main replacement program in light of state decarbonization targets.') "
+        ") AS src(party, witness, title_w, kind, title, fdate, topics, summ) "
+        "JOIN cases c ON c.docket_number = 'NLPG-26-001' "
+        "JOIN parties p ON p.case_id = c.id AND p.name = src.party "
+        "WHERE NOT EXISTS (SELECT 1 FROM intervenor_testimony it WHERE it.case_id = c.id AND it.title = src.title)"
+    )
+
+    # Outbound (counter-discovery) DRs against intervenor witnesses
+    await _try("outbound_drs",
+        "INSERT INTO data_requests ( "
+        "  id, case_id, phase_id, dr_number, requester, requester_kind, "
+        "  issued_date, due_date, subject, body, status, priority, topic_tags, "
+        "  direction, target_party_id "
+        ") "
+        "SELECT gen_random_uuid(), c.id, "
+        "       (SELECT id FROM case_phases WHERE case_id = c.id AND phase_type = 'discovery'), "
+        "       src.dr_no, 'NLPG (Utility)', 'utility', "
+        "       CAST(src.issued AS DATE), CAST(src.due AS DATE), src.subject, src.body, "
+        "       CAST(src.status AS dr_status), 'normal', ARRAY[]::TEXT[], "
+        "       'outbound', p.id "
+        "FROM (VALUES "
+        "  ('Office of Consumer Advocacy','NLPG-DR-OCA-001','Provide DCF model supporting 9.25% ROE','Per Mr. Hassan''s direct testimony p.22, please provide the full DCF model used to support the 9.25% ROE recommendation, including all proxy companies, time periods, growth rate assumptions, and source data.','2026-04-30','2026-05-14','assigned'),"
+        "  ('Office of Consumer Advocacy','NLPG-DR-OCA-002','Justify 50/50 capital structure recommendation','Identify each comparable utility used to support the 50% equity ratio recommendation and provide their actual rate-case-authorized capital structures.','2026-04-30','2026-05-14','drafting'),"
+        "  ('Cascadia Industrial Energy Users Coalition','NLPG-DR-CIEUC-001','Provide MDS methodology basis','Reference the academic / regulatory basis Mr. Volkov uses for the minimum-distribution-system claim including any prior commission orders adopting his methodology in other jurisdictions.','2026-05-02','2026-05-16','new'),"
+        "  ('Cascadia Climate Action Coalition','NLPG-DR-CCAC-001','Substantiate $480M disallowance recommendation','Identify each specific project within the $480M gas main replacement program that Dr. Reeves recommends disallowing, and provide the basis for each.','2026-05-04','2026-05-18','assigned') "
+        ") AS src(party, dr_no, subject, body, issued, due, status) "
+        "JOIN cases c ON c.docket_number = 'NLPG-26-001' "
+        "JOIN parties p ON p.case_id = c.id AND p.name = src.party "
+        "WHERE NOT EXISTS (SELECT 1 FROM data_requests dr WHERE dr.case_id = c.id AND dr.dr_number = src.dr_no)"
+    )
+
+    # Application packages — auto-create for active and pre-filing cases
+    await _try("application_packages",
+        "INSERT INTO application_packages (id, case_id, title, target_filing_date, status, summary) "
+        "SELECT gen_random_uuid(), c.id, c.name || ' — application package', "
+        "       c.filed_date, "
+        "       CASE WHEN c.status = 'pre_filing' THEN 'in_prep' "
+        "            WHEN c.status = 'active' THEN 'filed' "
+        "            ELSE 'filed' END, "
+        "       'Auto-created application package for ' || c.docket_number "
+        "FROM cases c "
+        "WHERE NOT EXISTS (SELECT 1 FROM application_packages ap WHERE ap.case_id = c.id)"
+    )
+
+    # Financial schedules for the active and pre-filing cases (templated)
+    await _try("financial_schedules",
+        "INSERT INTO financial_schedules (id, case_id, name, kind, status) "
+        "SELECT gen_random_uuid(), c.id, src.name, src.kind, "
+        "       CASE WHEN c.status = 'active' THEN 'complete' "
+        "            WHEN c.status = 'pre_filing' THEN src.pre_status "
+        "            ELSE 'complete' END "
+        "FROM (VALUES "
+        "  ('Income Statement 2024-2026','income_statement','in_progress'),"
+        "  ('Balance Sheet 2026','balance_sheet','in_progress'),"
+        "  ('Cash Flow 2024-2026','cash_flow','not_started'),"
+        "  ('Rate Base Schedule','rate_base','in_progress'),"
+        "  ('Capital Plan 2026-2030','capex','in_progress'),"
+        "  ('O&M Expenses 2024-2026','om','not_started') "
+        ") AS src(name, kind, pre_status) "
+        "JOIN cases c ON c.docket_number IN ('NLPG-26-001','NLPG-27-001') "
+        "WHERE NOT EXISTS (SELECT 1 FROM financial_schedules fs WHERE fs.case_id = c.id AND fs.name = src.name)"
+    )
+
+    # Cost-of-service studies + rate design proposals (templated)
+    await _try("cost_of_service_studies",
+        "INSERT INTO cost_of_service_studies (id, case_id, name, study_type, status, summary) "
+        "SELECT gen_random_uuid(), c.id, src.name, src.stype, src.status, src.summ "
+        "FROM (VALUES "
+        "  ('Embedded Cost of Service Study 2026','embedded','complete','Class allocation using embedded cost methodology consistent with prior CPUC-X precedent.'),"
+        "  ('Marginal Cost Sensitivity','custom','in_progress','Sensitivity analysis to demonstrate impact of alternative allocation methodologies.') "
+        ") AS src(name, stype, status, summ) "
+        "JOIN cases c ON c.docket_number = 'NLPG-26-001' "
+        "WHERE NOT EXISTS (SELECT 1 FROM cost_of_service_studies cos WHERE cos.case_id = c.id AND cos.name = src.name)"
+    )
+    await _try("rate_design_proposals",
+        "INSERT INTO rate_design_proposals (id, case_id, name, status, bill_impact_summary) "
+        "SELECT gen_random_uuid(), c.id, src.name, src.status, src.impact "
+        "FROM (VALUES "
+        "  ('Residential 3-tier inclining block','draft','Avg residential bill +$8.20/mo; low-income tier +$2.40/mo with discount; high-usage tier +$22/mo'),"
+        "  ('Industrial demand charge restructure','draft','Industrial Class C bills +6.8% on average; spread varies by load factor') "
+        ") AS src(name, status, impact) "
+        "JOIN cases c ON c.docket_number = 'NLPG-26-001' "
+        "WHERE NOT EXISTS (SELECT 1 FROM rate_design_proposals rd WHERE rd.case_id = c.id AND rd.name = src.name)"
+    )
+
+    # Public notices — closed cases have published ones, active case has approved draft
+    await _try("public_notices",
+        "INSERT INTO public_notices (id, case_id, title, body, channels, publication_date, status) "
+        "SELECT gen_random_uuid(), c.id, "
+        "       'Public Notice — ' || c.docket_number, "
+        "       'NOTICE OF FILING. Northern Light Power & Gas Company (\"NLPG\") has filed an application with the ' || c.commission || ' (docket ' || c.docket_number || ') seeking authority to increase its rates and charges. The application is on file with the Commission and available for public review at www.cpuc-x.example/dockets. Persons wishing to intervene or comment must do so within 30 days of publication.', "
+        "       ARRAY['newspaper','web','bill_insert']::TEXT[], "
+        "       c.filed_date, "
+        "       CASE WHEN c.status = 'closed' THEN 'published' WHEN c.status = 'active' THEN 'published' ELSE 'draft' END "
+        "FROM cases c "
+        "WHERE NOT EXISTS (SELECT 1 FROM public_notices pn WHERE pn.case_id = c.id)"
+    )
+
+    # ALJ recommendations — for closed cases (precede final commission orders)
+    await _try("alj_recommendations",
+        "INSERT INTO alj_recommendations ( "
+        "  id, case_id, alj_name, issued_date, "
+        "  recommended_revenue_increase_m, recommended_roe_pct, recommended_equity_pct, "
+        "  capex_recommended_m, summary, positions_adopted, positions_rejected "
+        ") "
+        "SELECT gen_random_uuid(), c.id, src.alj, CAST(src.idate AS DATE), "
+        "       src.rev, src.roe, src.eq, src.capex, src.summ, "
+        "       CAST(src.adopted AS TEXT[]), CAST(src.rejected AS TEXT[]) "
+        "FROM (VALUES "
+        "  ('NLPG-22-005','ALJ Marcus Chen','2023-03-22',122.0, 9.65, 51.0, 395.0,"
+        "    'ALJ recommends $122M revenue increase (vs $142M request, vs Staff''s $98M). Recommends 9.65% ROE on 51/49 capital structure. Recommends disallowing $35M of gas capex but not the full $42M Staff sought.',"
+        "    ARRAY['Staff DCF methodology (partial)','OCA equity cap concept']::TEXT[],"
+        "    ARRAY['Staff''s 9.10% ROE','OCA''s 50% equity ratio','CIEUC cost-of-service reallocation']::TEXT[]),"
+        "  ('NLPG-24-003','ALJ Marcus Chen','2024-09-15',30.0, 9.65, 52.0, 0.0,"
+        "    'ALJ recommends a 25 bps ROE step-up to 9.65% in this limited-issue proceeding. Recommends rejecting Staff''s proposed 9.50% as understated.',"
+        "    ARRAY['Company''s framing of capital market evidence']::TEXT[],"
+        "    ARRAY['Staff''s 9.50% ROE']::TEXT[]),"
+        "  ('NLPG-20-007','ALJ Karen Whitfield','2021-01-04',105.0, 9.50, 50.0, 320.0,"
+        "    'Historical 2020 ALJ recommendation. Commission ultimately ordered $96.5M (lower than ALJ rec) and 9.40% ROE.',"
+        "    ARRAY['OCA capex disallowance']::TEXT[],"
+        "    ARRAY['Company''s full revenue request']::TEXT[]) "
+        ") AS src(docket, alj, idate, rev, roe, eq, capex, summ, adopted, rejected) "
+        "JOIN cases c ON c.docket_number = src.docket "
+        "WHERE NOT EXISTS (SELECT 1 FROM alj_recommendations a WHERE a.case_id = c.id)"
+    )
+
+    # ── Final block (existing) — agent_memory rows for closed cases ──
+    async with engine.begin() as conn:
         # Agent memory rows for closed cases — positions taken with outcomes.
         # These are what the Cross-case Insights endpoint joins against, and
         # what the drafter agent surfaces as "what we said on this topic before".
