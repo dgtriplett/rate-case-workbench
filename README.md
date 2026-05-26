@@ -2,6 +2,9 @@
 
 End-to-end Databricks App for utility rate case workflow management. Built on Lakebase, Vector Search, Foundation Model APIs, Mosaic Agent Framework, and Genie.
 
+> **New to this repo? See [`DEPLOYMENT.md`](./DEPLOYMENT.md) for a step-by-step guide to standing this up in your own Databricks workspace — with or without the bundled synthetic dataset.**
+
+
 ## What it does
 
 Walks regulatory affairs teams through the full lifecycle of a utility rate case:
